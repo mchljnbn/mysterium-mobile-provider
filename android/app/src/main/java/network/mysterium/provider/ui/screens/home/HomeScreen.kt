@@ -43,6 +43,7 @@ import network.mysterium.provider.ui.screens.home.views.StatusItem
 import network.mysterium.provider.ui.theme.Colors
 import network.mysterium.provider.ui.theme.Paddings
 import network.mysterium.provider.ui.theme.TextStyles
+import org.koin.androidx.compose.koinViewModel
 
 @Composable
 fun HomeScreen(
@@ -138,7 +139,7 @@ fun HomeScreenContent(
                     .padding(Paddings.default),
                 text = stringResource(id = R.string.terms_and_conditions),
                 onClick = {
-                    onNavigate(NavigationDestination.TAC())
+                    onNavigate(NavigationDestination.TAC)
                 }
             )
         }
