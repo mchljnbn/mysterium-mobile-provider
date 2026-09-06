@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import network.mysterium.node.model.NodeServiceType
+import network.mysterium.node.model.NodeTrafficBytes
 import network.mysterium.provider.R
 import network.mysterium.provider.ui.components.buttons.PrimaryTextButton
 import network.mysterium.provider.ui.components.buttons.SettingsButton
@@ -39,6 +40,7 @@ import network.mysterium.provider.ui.navigation.NavigationDestination
 import network.mysterium.provider.ui.screens.home.views.BalanceItem
 import network.mysterium.provider.ui.screens.home.views.ErrorItem
 import network.mysterium.provider.ui.screens.home.views.ServiceItem
+import network.mysterium.provider.ui.screens.home.views.TrafficItem
 import network.mysterium.provider.ui.theme.Colors
 import network.mysterium.provider.ui.theme.Paddings
 import network.mysterium.provider.ui.theme.TextStyles
@@ -119,6 +121,19 @@ fun HomeScreenContent(
                     }
 
                 }
+
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Header(text = stringResource(id = R.string.traffic))
+
+                        TrafficItem(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = Paddings.default),
+                            traffic = state.trafficBytes
+                        )
+                    }
+                }
             }
             PrimaryTextButton(
                 modifier = Modifier
@@ -161,7 +176,11 @@ fun HomeScreenContentPreview() {
                 NodeServiceType(NodeServiceType.Service.WIREGUARD, NodeServiceType.State.RUNNING),
             ),
             isLimitReached = true,
-            balance = 0.0
+            balance = 0.0,
+            trafficBytes = NodeTrafficBytes(
+                bytesReceived = 3_221_225_472,
+                bytesSent = 536_870_912
+            )
         )
     ) {
 

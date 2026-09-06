@@ -15,6 +15,7 @@ import network.mysterium.node.model.NodeConfig
 import network.mysterium.node.model.NodeIdentity
 import network.mysterium.node.model.NodeServiceType
 import network.mysterium.node.model.NodeTerms
+import network.mysterium.node.model.NodeTrafficBytes
 import network.mysterium.terms.Terms
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -31,6 +32,7 @@ internal class NodeImpl(
     }
 
     private var serviceConnection: ServiceConnection? = null
+    private var serviceStartedAt: Long = 0
 
     override val terms: NodeTerms
         get() = NodeTerms(Terms.endUserMD(), Terms.version())
@@ -55,6 +57,12 @@ internal class NodeImpl(
     override val limitMonitor: StateFlow<Boolean>
         get() = dataSource.limitMonitor
 
+    override val trafficBytes: StateFlow<NodeTrafficBytes>
+        get() = dataSource.trafficBytes
+
+    override val uptimeMillis: Long
+        get() = System.currentTimeMillis() - serviceStartedAt
+
     override suspend fun updateConfig(config: NodeConfig) {
         storage.config = config
         service?.updateServices()
@@ -67,6 +75,7 @@ internal class NodeImpl(
         // Start the service in addition to binding, so it has an independent
         // lifecycle anchor that survives task removal and UI unbinding.
         // The service puts itself into the foreground in onCreate().
+        serviceStartedAt = System.currentTimeMillis()
         val service = startService()
         service.start()
         this.service = service

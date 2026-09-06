@@ -22,7 +22,8 @@ class HomeViewModel(
         return Home.State(
             services = emptyList(),
             isLimitReached = false,
-            balance = 0.0
+            balance = 0.0,
+            trafficBytes = node.trafficBytes.value
         )
     }
 
@@ -32,6 +33,7 @@ class HomeViewModel(
                 observeServices()
                 observeBalance()
                 observeLimit()
+                observeTraffic()
             }
         }
     }
@@ -53,6 +55,12 @@ class HomeViewModel(
     private fun observeLimit() = launch {
         node.limitMonitor.collect {
             setState { copy(isLimitReached = it) }
+        }
+    }
+
+    private fun observeTraffic() = launch {
+        node.trafficBytes.collect {
+            setState { copy(trafficBytes = it) }
         }
     }
 }

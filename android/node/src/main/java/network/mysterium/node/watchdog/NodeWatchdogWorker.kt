@@ -16,6 +16,10 @@ import java.util.concurrent.TimeUnit
  * alive. The service itself updates [Storage.lastHeartbeat] on every balance
  * tick; if the heartbeat is stale, the worker restarts the service.
  *
+ * Runs every 10 minutes, doubling as the keep-alive cron: if the service
+ * died for any reason (kill, crash, reboot without receiver), it gets
+ * restarted within 10 minutes.
+ *
  * Starting a foreground service from the background relies on the user having
  * exempted the app from battery optimization (the app requests this during
  * onboarding).
@@ -43,7 +47,7 @@ class NodeWatchdogWorker(
     }
 
     companion object {
-        val STALE_THRESHOLD_MS = TimeUnit.MINUTES.toMillis(20)
+        val STALE_THRESHOLD_MS = TimeUnit.MINUTES.toMillis(10)
 
         const val UNIQUE_WORK_NAME = "node_watchdog"
     }

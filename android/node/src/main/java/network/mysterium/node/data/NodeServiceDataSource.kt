@@ -23,11 +23,13 @@ interface NodeServiceDataSource {
     val services: StateFlow<List<NodeServiceType>>
     val balance: StateFlow<Double>
     val limitMonitor: StateFlow<Boolean>
+    val trafficBytes: StateFlow<NodeTrafficBytes>
 
     suspend fun fetchIdentity()
     suspend fun fetchBalance()
     suspend fun fetchServices()
     suspend fun updateMobileDataUsage(usedBytesPerMonth: Long)
+    fun updateTrafficBytes(bytes: NodeTrafficBytes)
 }
 
 class NodeServiceDataSourceImpl(
@@ -43,6 +45,8 @@ class NodeServiceDataSourceImpl(
     override val services: MutableStateFlow<List<NodeServiceType>> = MutableStateFlow(emptyList())
     override val balance: MutableStateFlow<Double> = MutableStateFlow(0.0)
     override val limitMonitor: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    override val trafficBytes: MutableStateFlow<NodeTrafficBytes> =
+        MutableStateFlow(NodeTrafficBytes.empty())
 
 
     override suspend fun fetchIdentity() {
@@ -112,6 +116,19 @@ class NodeServiceDataSourceImpl(
             )
         } else {
             limitMonitor.update { false }
+        }
+    }
+
+    /**
+     * Called by NodeService with the cumulative session statistics reported by
+     * the node (bytes transferred across all active connections).
+     */
+    override fun updateTrafficBytes(bytes: NodeTrafficBytes) {
+        trafficBytes.update {
+            NodeTrafficBytes(
+                bytesReceived = maxOf(it.bytesReceived, bytes.bytesReceived),
+                bytesSent = maxOf(it.bytesSent, bytes.bytesSent)
+            )
         }
     }
 

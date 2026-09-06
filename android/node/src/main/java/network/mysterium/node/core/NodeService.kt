@@ -39,6 +39,7 @@ import network.mysterium.node.extensions.nextDay
 import network.mysterium.node.model.NodeIdentity
 import network.mysterium.node.model.NodeServiceType
 import network.mysterium.node.model.NodeUsage
+import network.mysterium.node.model.NodeTrafficBytes
 import network.mysterium.node.network.NetworkReporter
 import network.mysterium.node.network.NetworkType
 import network.mysterium.node.utils.cancelCatching
@@ -57,6 +58,7 @@ class NodeService : Service() {
         const val CHANNEL_ID = "mystnodes.channel"
         const val NOTIFICATION_ID = 1
         val BALANCE_CHECK_INTERVAL = TimeUnit.MINUTES.toMillis(1)
+        val UPTIME_UPDATE_INTERVAL = TimeUnit.MINUTES.toMillis(10)
         val TAG: String = NodeService::class.java.simpleName
     }
 
@@ -80,13 +82,16 @@ class NodeService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher + defaultErrorHandler)
     private var balanceTimer: Timer? = null
     private var endOfDayTimer: Timer? = null
+    private var uptimeTimer: Timer? = null
     private var mobileLimitJob: Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var serviceStartedAt: Long = 0
 
     override fun onCreate() {
         super.onCreate()
         // The service can be recreated by the system (START_STICKY) without the app UI
         // bound to it — start in foreground immediately and wire everything ourselves.
+        serviceStartedAt = System.currentTimeMillis()
         startForegroundNotification()
         acquireWakeLock()
         startInternal()
@@ -123,7 +128,9 @@ class NodeService : Service() {
             }
         }
         registerListeners()
+        registerStatisticsListener()
         startBalanceTimer()
+        startUptimeTimer()
         startNode()
         observeNotification()
     }
@@ -155,7 +162,7 @@ class NodeService : Service() {
         isNotificationShown.value = true
     }
 
-    private fun buildNotification(title: String): NotificationCompat.Builder? {
+    private fun buildNotification(title: String, text: String? = null): NotificationCompat.Builder? {
         val intent =
             packageManager.getLaunchIntentForPackage("network.mysterium.provider") ?: return null
 
@@ -169,6 +176,8 @@ class NodeService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_logo)
             .setContentTitle(title)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentText(text)
             .setColor(Color.WHITE)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setVibrate(LongArray(0))
@@ -235,6 +244,23 @@ class NodeService : Service() {
         }
     }
 
+    private fun registerStatisticsListener() {
+        scope.launch {
+            mobileNode = nodeContainer.getInstance()
+
+            // OnChange(durationSeconds, bytesReceived, bytesSent, tokensSpent) —
+            // cumulative totals for the node's active connections.
+            mobileNode?.registerStatisticsChangeCallback { _, bytesReceived, bytesSent, _ ->
+                nodeServiceDataSource.updateTrafficBytes(
+                    NodeTrafficBytes(
+                        bytesReceived = bytesReceived,
+                        bytesSent = bytesSent
+                    )
+                )
+            }
+        }
+    }
+
     private fun observeNotification() {
         combine(
             isNotificationShown,
@@ -251,8 +277,17 @@ class NodeService : Service() {
     }
 
     private fun updateNotificationToConnected() {
+        val traffic = nodeServiceDataSource.trafficBytes.value
+        val download = formatBytes(traffic.bytesReceived)
+        val upload = formatBytes(traffic.bytesSent)
         val notification = buildNotification(
-            title = getString(R.string.notification_connected)
+            title = getString(R.string.notification_connected),
+            text = getString(
+                R.string.notification_status,
+                formattedUptime(),
+                download,
+                upload
+            )
         ) ?: return
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(NOTIFICATION_ID, notification.build())
@@ -270,6 +305,32 @@ class NodeService : Service() {
                 storage.lastHeartbeat = System.currentTimeMillis()
             }
         }
+    }
+
+    private fun startUptimeTimer() {
+        uptimeTimer?.cancel()
+        uptimeTimer = fixedRateTimer(
+            initialDelay = UPTIME_UPDATE_INTERVAL,
+            period = UPTIME_UPDATE_INTERVAL
+        ) {
+            updateNotificationToConnected()
+        }
+    }
+
+    private fun formattedUptime(): String {
+        val uptimeSeconds = (System.currentTimeMillis() - serviceStartedAt) / 1000
+        val hours = uptimeSeconds / 3600
+        val minutes = (uptimeSeconds % 3600) / 60
+        return getString(R.string.notification_uptime, hours, minutes)
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        if (bytes < 1024) return "$bytes B"
+        val kb = bytes / 1024.0
+        if (kb < 1024) return String.format("%.1f KB", kb)
+        val mb = kb / 1024.0
+        if (mb < 1024) return String.format("%.1f MB", mb)
+        return String.format("%.1f GB", mb / 1024.0)
     }
 
     private fun observeNetworkUsage() {

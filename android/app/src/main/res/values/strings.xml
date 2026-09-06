@@ -27,6 +27,7 @@
     <string name="unable_init_node_no_network">Unable to start node due to no internet connection</string>
     <string name="services">Services</string>
     <string name="unsettled_earnings">Unsettled earnings</string>
+    <string name="traffic">Traffic</string>
     <string name="mobile_data_limit_reached">Mobile data limit reached!</string>
     <string name="save">Save</string>
     <string name="service_public">Public</string>

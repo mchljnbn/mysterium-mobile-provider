@@ -6,6 +6,7 @@ import network.mysterium.node.model.NodeConfig
 import network.mysterium.node.model.NodeIdentity
 import network.mysterium.node.model.NodeServiceType
 import network.mysterium.node.model.NodeTerms
+import network.mysterium.node.model.NodeTrafficBytes
 
 interface Node {
     /**
@@ -47,6 +48,18 @@ interface Node {
      * Get mobile limit reached status.
      */
     val limitMonitor: StateFlow<Boolean>
+
+    /**
+     * Cumulative traffic counters (bytes received / sent) for the current
+     * node run.
+     */
+    val trafficBytes: StateFlow<NodeTrafficBytes>
+
+    /**
+     * How long the node service has been running since its start
+     * (serviceStartedAt - now), in milliseconds.
+     */
+    val uptimeMillis: Long
 
     /**
      * Update node config
