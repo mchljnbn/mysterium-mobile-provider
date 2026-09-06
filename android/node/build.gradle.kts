@@ -43,5 +43,6 @@ dependencies {
     implementation(libs.bundles.di)
     implementation(libs.bundles.serialization)
     implementation(libs.bundles.analytics)
-    implementation(libs.bundles.work)
+    // Exposed as api so the app module can schedule NodeWatchdogWorker.
+    api(libs.androidx.work)
 }

@@ -49,10 +49,9 @@ fun MysteriumTheme(
             // Edge-to-edge on Android 16+: the window background keeps the brand
             // gradient visible behind system bars; status bar icons stay dark.
             val background = ContextCompat.getDrawable(context, R.drawable.gradient_theme)
-            (view.context as Activity).window.apply {
-                setBackgroundDrawable(background)
-            }
-            WindowCompat.getInsetsController(this, view).apply {
+            val window = (view.context as Activity).window
+            window.setBackgroundDrawable(background)
+            WindowCompat.getInsetsController(window, view).apply {
                 isAppearanceLightStatusBars = true
                 isAppearanceLightNavigationBars = true
             }
