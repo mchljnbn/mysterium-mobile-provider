@@ -118,7 +118,7 @@ class NodeServiceDataSourceImpl(
         }
     }
 
-    override fun updateStatus(status: NodeStatus) {
-        status.update { status }
+    override fun updateStatus(value: NodeStatus) {
+        status.update { value }
     }
 }
