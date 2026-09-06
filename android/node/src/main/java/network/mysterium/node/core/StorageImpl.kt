@@ -19,6 +19,8 @@ internal class StorageImpl(
         const val IS_REGISTERED = "isRegistered"
         const val NODE_CONFIG = "nodeConfig"
         const val NODE_USAGE = "nodeUsage"
+        const val SHOULD_RUN = "shouldRun"
+        const val LAST_HEARTBEAT = "lastHeartbeat"
     }
 
     private val preferences = context.getSharedPreferences("mysterium.node", Context.MODE_PRIVATE)
@@ -40,6 +42,22 @@ internal class StorageImpl(
         get() = decode(NODE_USAGE) ?: NodeUsage(Date().time, 0)
         set(value) {
             encode(NODE_USAGE, value)
+        }
+
+    override var shouldRun: Boolean
+        get() = preferences.getBoolean(SHOULD_RUN, false)
+        set(value) {
+            preferences.edit()
+                .putBoolean(SHOULD_RUN, value)
+                .apply()
+        }
+
+    override var lastHeartbeat: Long
+        get() = preferences.getLong(LAST_HEARTBEAT, 0)
+        set(value) {
+            preferences.edit()
+                .putLong(LAST_HEARTBEAT, value)
+                .apply()
         }
 
     private inline fun <reified T> decode(key: String): T? {

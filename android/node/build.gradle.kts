@@ -43,4 +43,5 @@ dependencies {
     implementation(libs.bundles.di)
     implementation(libs.bundles.serialization)
     implementation(libs.bundles.analytics)
+    implementation(libs.bundles.work)
 }

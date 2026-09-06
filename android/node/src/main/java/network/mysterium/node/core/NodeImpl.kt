@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import network.mysterium.node.Node
@@ -63,6 +64,9 @@ internal class NodeImpl(
 
     override suspend fun start() {
         if (service != null) return
+        // Start the service in addition to binding, so it has an independent
+        // lifecycle anchor that survives task removal and UI unbinding.
+        // The service puts itself into the foreground in onCreate().
         val service = startService()
         service.start()
         this.service = service
@@ -81,10 +85,16 @@ internal class NodeImpl(
         service?.stop()
         disableForegroundService()
         serviceConnection?.let { context.unbindService(it) }
+        // Explicit user shutdown — also stop the started service so the system
+        // doesn't consider this a crash and doesn't attempt a STICKY restart.
+        context.stopService(Intent(context, NodeService::class.java))
+        service = null
+        serviceConnection = null
     }
 
     private suspend fun startService() = suspendCoroutine { continuation ->
         val intent = Intent(context, NodeService::class.java)
+        ContextCompat.startForegroundService(context, intent)
         serviceConnection = serviceConnection ?: object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
                 val service = binder as? NodeServiceBinder
@@ -97,7 +107,8 @@ internal class NodeImpl(
             }
 
             override fun onServiceDisconnected(name: ComponentName?) {
-                service?.stopSelf()
+                // The service died unexpectedly (process kill) — the STICKY
+                // restart will bring it back; nothing to do here.
             }
         }
         context.bindService(

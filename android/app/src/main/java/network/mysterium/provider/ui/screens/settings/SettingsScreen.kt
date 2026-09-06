@@ -60,7 +60,6 @@ import network.mysterium.provider.ui.theme.MysteriumTheme
 import network.mysterium.provider.ui.theme.Paddings
 import network.mysterium.provider.ui.theme.TextStyles
 import org.koin.androidx.compose.koinViewModel
-import kotlin.system.exitProcess
 
 @Composable
 fun SettingsScreen(
@@ -78,8 +77,10 @@ fun SettingsScreen(
                 when (it) {
                     is Settings.Effect.Navigation -> onNavigate(it.destination)
                     Settings.Effect.CloseApp -> {
+                        // node.stop() already shut the service down cleanly —
+                        // a hard exitProcess(0) here would kill the whole process
+                        // for no reason and fight a future sticky restart.
                         context.getActivity()?.finishAndRemoveTask()
-                        exitProcess(0)
                     }
                 }
             }

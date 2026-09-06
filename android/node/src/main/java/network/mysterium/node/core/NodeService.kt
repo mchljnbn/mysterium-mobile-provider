@@ -11,6 +11,7 @@ import android.graphics.Color
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
@@ -80,34 +81,84 @@ class NodeService : Service() {
     private var balanceTimer: Timer? = null
     private var endOfDayTimer: Timer? = null
     private var mobileLimitJob: Job? = null
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate() {
-        //todo needs refactor
+        super.onCreate()
+        // The service can be recreated by the system (START_STICKY) without the app UI
+        // bound to it — start in foreground immediately and wire everything ourselves.
+        startForegroundNotification()
+        acquireWakeLock()
+        startInternal()
+        storage.shouldRun = true
+        observeNetworkUsage()
+        observeNetworkStatus()
+        startEndOfDayTimer()
+        observeBatteryStatus()
+        observeLimitStatus()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Started (not only bound) so the service survives task removal; STICKY so the
+        // system recreates it after a low-memory kill. intent is null after a sticky
+        // restart — never read extras from it.
+        if (!isStarted) {
+            startInternal()
+        }
+        return START_STICKY
+    }
+
+    private fun startInternal() {
+        if (isStarted) return
+        isStarted = true
+        storage.shouldRun = true
         scope.launch {
             mobileNode = nodeContainer.getInstance()
         }
         scope.launch {
             nodeServiceDataSource.services.collectLatest {
                 if (it.any { it.state == NodeServiceType.State.STARTING || it.state == NodeServiceType.State.RUNNING }) {
-                    updateNodeServices(true)
+                    updateNodeServices(isSkipStart = true)
                 }
             }
         }
-        observeNetworkUsage()
-        observeNetworkStatus()
-        startEndOfDayTimer()
-        observeBatteryStatus()
-        observeLimitStatus()
-        super.onCreate()
+        registerListeners()
+        startBalanceTimer()
+        startNode()
+        observeNotification()
     }
 
     override fun onBind(p0: Intent?): IBinder {
         return Bridge()
     }
 
+    private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "mystnodes:node-service"
+        ).apply { acquire() }
+    }
+
     private fun startForegroundNotification() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            createNotificationChannel()
+        }
+
+        val notification = buildNotification(
+            title = getString(R.string.notification_connecting)
+        ) ?: return
+        // The notification must be attached before any slow node work — never
+        // gate the first startForeground() behind network operations.
+        startForegroundWithConnectedDeviceType(notification.build())
+        isNotificationShown.value = true
+    }
+
+    private fun buildNotification(title: String): NotificationCompat.Builder? {
         val intent =
-            packageManager.getLaunchIntentForPackage("network.mysterium.provider") ?: return
+            packageManager.getLaunchIntentForPackage("network.mysterium.provider") ?: return null
+
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,
@@ -115,28 +166,27 @@ class NodeService : Service() {
             PendingIntent.FLAG_IMMUTABLE
         )
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            createNotificationChannel()
-        }
-
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_logo)
-            .setContentTitle("Connected")
+            .setContentTitle(title)
             .setColor(Color.WHITE)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setVibrate(LongArray(0))
             .setContentIntent(pendingIntent)
             .setOnlyAlertOnce(true)
             .setOngoing(true)
-            .build()
+    }
 
+    private fun startForegroundWithConnectedDeviceType(notification: android.app.Notification) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+            )
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
-
-        isNotificationShown.value = true
     }
 
     @Suppress("DEPRECATION")
@@ -155,8 +205,8 @@ class NodeService : Service() {
         service.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_ID,
-                "Myst Nodes",
-                NotificationManager.IMPORTANCE_HIGH
+                getString(R.string.notification_channel_name),
+                NotificationManager.IMPORTANCE_LOW
             )
         )
     }
@@ -193,9 +243,19 @@ class NodeService : Service() {
             if (!isNotificationShown && identity.status == NodeIdentity.Status.REGISTERED) {
                 updateNodeServices()
                 startForegroundNotification()
+            } else if (isNotificationShown && identity.status == NodeIdentity.Status.REGISTERED) {
+                updateNotificationToConnected()
             }
         }
             .launchIn(scope)
+    }
+
+    private fun updateNotificationToConnected() {
+        val notification = buildNotification(
+            title = getString(R.string.notification_connected)
+        ) ?: return
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(NOTIFICATION_ID, notification.build())
     }
 
     private fun startBalanceTimer() {
@@ -206,6 +266,8 @@ class NodeService : Service() {
         ) {
             scope.launch {
                 nodeServiceDataSource.fetchBalance()
+                // Report aliveness for the watchdog worker.
+                storage.lastHeartbeat = System.currentTimeMillis()
             }
         }
     }
@@ -287,7 +349,18 @@ class NodeService : Service() {
         }
     }
 
+    override fun onDestroy() {
+        releaseWakeLock()
+        super.onDestroy()
+    }
+
+    private fun releaseWakeLock() {
+        wakeLock?.let { if (it.isHeld) it.release() }
+        wakeLock = null
+    }
+
     private fun stopSelfService() {
+        storage.shouldRun = false
         this.stopSelf()
     }
 
@@ -295,12 +368,9 @@ class NodeService : Service() {
     internal inner class Bridge : Binder(), NodeServiceBinder {
 
         override fun start() {
-            if (isStarted) return
-            observeNotification()
-            registerListeners()
-            startBalanceTimer()
-            startNode()
-            isStarted = true
+            // Kept for backwards compatibility — the service now wires itself
+            // in onCreate/onStartCommand. No-op when already started.
+            startInternal()
         }
 
         override fun startForegroundService() {
@@ -327,6 +397,7 @@ class NodeService : Service() {
 
         override suspend fun stop() {
             isStarted = false
+            storage.shouldRun = false
             analytics.trackEvent(AnalyticsEvent.ToggleAnalyticsEvent.NodeUiState(isEnabled = false))
             mobileNode?.stopProvider()
             mobileNode?.shutdown()

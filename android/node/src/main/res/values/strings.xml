@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notification_channel_name">Myst Nodes</string>
+    <string name="notification_connecting">Connecting…</string>
+    <string name="notification_connected">Connected</string>
+</resources>
