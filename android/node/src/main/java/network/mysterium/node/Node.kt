@@ -1,12 +1,11 @@
 package network.mysterium.node
 
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import network.mysterium.node.model.NodeConfig
 import network.mysterium.node.model.NodeIdentity
 import network.mysterium.node.model.NodeServiceType
+import network.mysterium.node.model.NodeStatus
 import network.mysterium.node.model.NodeTerms
-import network.mysterium.node.model.NodeTrafficBytes
 
 interface Node {
     /**
@@ -50,16 +49,11 @@ interface Node {
     val limitMonitor: StateFlow<Boolean>
 
     /**
-     * Cumulative traffic counters (bytes received / sent) for the current
-     * node run.
+     * High-level node status (online, connecting, no network, …)
+     * derived by the node service. Drives the home screen status card
+     * and the notification status line.
      */
-    val trafficBytes: StateFlow<NodeTrafficBytes>
-
-    /**
-     * How long the node service has been running since its start
-     * (serviceStartedAt - now), in milliseconds.
-     */
-    val uptimeMillis: Long
+    val status: StateFlow<NodeStatus>
 
     /**
      * Update node config

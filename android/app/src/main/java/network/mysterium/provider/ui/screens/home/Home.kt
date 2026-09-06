@@ -1,7 +1,7 @@
 package network.mysterium.provider.ui.screens.home
 
 import network.mysterium.node.model.NodeServiceType
-import network.mysterium.node.model.NodeTrafficBytes
+import network.mysterium.node.model.NodeStatus
 import network.mysterium.provider.core.UIEffect
 import network.mysterium.provider.core.UIEvent
 import network.mysterium.provider.core.UIState
@@ -15,7 +15,7 @@ sealed class Home {
         val services: List<NodeServiceType>,
         val isLimitReached: Boolean,
         val balance: Double,
-        val trafficBytes: NodeTrafficBytes = NodeTrafficBytes.empty()
+        val nodeStatus: NodeStatus = NodeStatus.UNKNOWN
     ) : UIState
 
     sealed class Effect : UIEffect

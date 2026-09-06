@@ -6,7 +6,6 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import network.mysterium.node.Node
 import network.mysterium.node.Storage
@@ -14,8 +13,8 @@ import network.mysterium.node.data.NodeServiceDataSource
 import network.mysterium.node.model.NodeConfig
 import network.mysterium.node.model.NodeIdentity
 import network.mysterium.node.model.NodeServiceType
+import network.mysterium.node.model.NodeStatus
 import network.mysterium.node.model.NodeTerms
-import network.mysterium.node.model.NodeTrafficBytes
 import network.mysterium.terms.Terms
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -32,7 +31,6 @@ internal class NodeImpl(
     }
 
     private var serviceConnection: ServiceConnection? = null
-    private var serviceStartedAt: Long = 0
 
     override val terms: NodeTerms
         get() = NodeTerms(Terms.endUserMD(), Terms.version())
@@ -57,11 +55,8 @@ internal class NodeImpl(
     override val limitMonitor: StateFlow<Boolean>
         get() = dataSource.limitMonitor
 
-    override val trafficBytes: StateFlow<NodeTrafficBytes>
-        get() = dataSource.trafficBytes
-
-    override val uptimeMillis: Long
-        get() = System.currentTimeMillis() - serviceStartedAt
+    override val status: StateFlow<NodeStatus>
+        get() = dataSource.status
 
     override suspend fun updateConfig(config: NodeConfig) {
         storage.config = config
@@ -75,7 +70,6 @@ internal class NodeImpl(
         // Start the service in addition to binding, so it has an independent
         // lifecycle anchor that survives task removal and UI unbinding.
         // The service puts itself into the foreground in onCreate().
-        serviceStartedAt = System.currentTimeMillis()
         val service = startService()
         service.start()
         this.service = service
@@ -99,6 +93,7 @@ internal class NodeImpl(
         context.stopService(Intent(context, NodeService::class.java))
         service = null
         serviceConnection = null
+        dataSource.updateStatus(NodeStatus.OFFLINE)
     }
 
     private suspend fun startService() = suspendCoroutine { continuation ->

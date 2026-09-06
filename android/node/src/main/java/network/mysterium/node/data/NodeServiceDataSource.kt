@@ -14,7 +14,7 @@ import network.mysterium.node.analytics.event.AnalyticsEvent
 import network.mysterium.node.core.NodeContainer
 import network.mysterium.node.model.NodeIdentity
 import network.mysterium.node.model.NodeServiceType
-import network.mysterium.node.model.NodeTrafficBytes
+import network.mysterium.node.model.NodeStatus
 import network.mysterium.node.network.NetworkReporter
 import network.mysterium.node.network.NetworkType
 
@@ -24,13 +24,13 @@ interface NodeServiceDataSource {
     val services: StateFlow<List<NodeServiceType>>
     val balance: StateFlow<Double>
     val limitMonitor: StateFlow<Boolean>
-    val trafficBytes: StateFlow<NodeTrafficBytes>
+    val status: StateFlow<NodeStatus>
 
     suspend fun fetchIdentity()
     suspend fun fetchBalance()
     suspend fun fetchServices()
     suspend fun updateMobileDataUsage(usedBytesPerMonth: Long)
-    fun updateTrafficBytes(bytes: NodeTrafficBytes)
+    fun updateStatus(status: NodeStatus)
 }
 
 class NodeServiceDataSourceImpl(
@@ -46,9 +46,7 @@ class NodeServiceDataSourceImpl(
     override val services: MutableStateFlow<List<NodeServiceType>> = MutableStateFlow(emptyList())
     override val balance: MutableStateFlow<Double> = MutableStateFlow(0.0)
     override val limitMonitor: MutableStateFlow<Boolean> = MutableStateFlow(false)
-    override val trafficBytes: MutableStateFlow<NodeTrafficBytes> =
-        MutableStateFlow(NodeTrafficBytes.empty())
-
+    override val status: MutableStateFlow<NodeStatus> = MutableStateFlow(NodeStatus.OFFLINE)
 
     override suspend fun fetchIdentity() {
         val mobileNode: MobileNode = nodeContainer.getInstance()
@@ -120,17 +118,7 @@ class NodeServiceDataSourceImpl(
         }
     }
 
-    /**
-     * Called by NodeService with the cumulative session statistics reported by
-     * the node (bytes transferred across all active connections).
-     */
-    override fun updateTrafficBytes(bytes: NodeTrafficBytes) {
-        trafficBytes.update {
-            NodeTrafficBytes(
-                bytesReceived = maxOf(it.bytesReceived, bytes.bytesReceived),
-                bytesSent = maxOf(it.bytesSent, bytes.bytesSent)
-            )
-        }
+    override fun updateStatus(status: NodeStatus) {
+        status.update { status }
     }
-
 }
