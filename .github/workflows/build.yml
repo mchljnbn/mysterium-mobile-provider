@@ -1,0 +1,62 @@
+name: Build custom APK
+
+on:
+  push:
+    branches: [custom-build]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/gradle/libs.versions.toml', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Cache Mysterium node AAR
+        uses: actions/cache@v4
+        with:
+          path: android/libs
+          key: node-aar-1.38.1
+
+      # Upstream's build.gradle.kts reads optional release signing from
+      # android/local.properties; the keystore is committed at
+      # android/keystore/ on this branch for consistent personal builds.
+      - name: Write signing config
+        working-directory: android
+        run: |
+          cat > local.properties << EOF
+          releaseStoreFile=keystore/release.keystore
+          releaseStorePassword=mystnodes2026
+          releaseKeyAlias=mystnodes
+          releaseKeyPassword=mystnodes2026
+          EOF
+
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mystnodes-custom-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
