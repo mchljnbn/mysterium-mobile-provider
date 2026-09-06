@@ -4,6 +4,7 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 import network.mysterium.node.Node
 import network.mysterium.node.model.NodeServiceType
+import network.mysterium.node.model.NodeTrafficBytes
 import network.mysterium.provider.core.CoreViewModel
 
 class HomeViewModel(
@@ -19,11 +20,15 @@ class HomeViewModel(
     }
 
     override fun createInitialState(): Home.State {
+        // NOTE: runs from CoreViewModel's init, i.e. during the super constructor —
+        // subclass constructor parameters (node) are NOT yet assigned here.
+        // Keep this free of `node` access; observeTraffic() fills trafficBytes
+        // on the first emission anyway.
         return Home.State(
             services = emptyList(),
             isLimitReached = false,
             balance = 0.0,
-            trafficBytes = node.trafficBytes.value
+            trafficBytes = NodeTrafficBytes.empty()
         )
     }
 
