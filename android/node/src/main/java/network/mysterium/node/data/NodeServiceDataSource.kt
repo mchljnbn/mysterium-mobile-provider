@@ -14,6 +14,7 @@ import network.mysterium.node.analytics.event.AnalyticsEvent
 import network.mysterium.node.core.NodeContainer
 import network.mysterium.node.model.NodeIdentity
 import network.mysterium.node.model.NodeServiceType
+import network.mysterium.node.model.NodeTrafficBytes
 import network.mysterium.node.network.NetworkReporter
 import network.mysterium.node.network.NetworkType
 
