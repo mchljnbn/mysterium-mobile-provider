@@ -24,6 +24,7 @@ internal class NodeImpl(
     private val context: Context,
     private val storage: Storage,
     private val dataSource: NodeServiceDataSource,
+    private val nodeContainer: NodeContainer,
 ) : Node {
 
     private companion object {
@@ -93,6 +94,9 @@ internal class NodeImpl(
         context.stopService(Intent(context, NodeService::class.java))
         service = null
         serviceConnection = null
+        // The mobile node has been shut down — drop the cached instance so a
+        // relaunch creates a fresh one instead of reusing the dead node.
+        nodeContainer.reset()
         dataSource.updateStatus(NodeStatus.OFFLINE)
     }
 
