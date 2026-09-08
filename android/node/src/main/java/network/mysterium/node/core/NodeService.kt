@@ -57,11 +57,22 @@ class NodeService : Service() {
     private companion object {
         const val CHANNEL_ID = "mystnodes.channel"
         const val NOTIFICATION_ID = 1
+
+        /**
+         * Node user-config key that persists which provider services
+         * startProvider() should bring up (comma separated service types).
+         */
+        const val ACTIVE_SERVICES_KEY = "active-services"
+        const val ALL_SERVICES_VALUE = "scraping,data_transfer,dvpn,monitoring"
         val BALANCE_CHECK_INTERVAL = TimeUnit.MINUTES.toMillis(1)
         val UPTIME_UPDATE_INTERVAL = TimeUnit.SECONDS.toMillis(1)
         // How long to wait before auto-starting the provider again after a
         // failed attempt, so a broken node cannot restart-loop.
         val AUTO_START_RETRY_COOLDOWN = TimeUnit.SECONDS.toMillis(30)
+        // Breathing room between stopProvider() and startProvider() so the
+        // node's services manager can finish tearing sessions down before the
+        // restart races ahead of it.
+        val RESTART_SETTLE_DELAY = 3_000L
         val TAG: String = NodeService::class.java.simpleName
     }
 
@@ -462,6 +473,7 @@ class NodeService : Service() {
         val batteryOption = if (config.allowUseOnBattery) true else batteryStatus.isCharging.value
         if (batteryOption && (wifiOption || (mobileDataOption && !isMobileLimitReached()))) {
             if (!isSkipStart) {
+                ensureAllServicesActive(node)
                 node.startProvider()
                 analytics.trackEvent(AnalyticsEvent.ToggleAnalyticsEvent.NodeUiState(isEnabled = true))
             }
@@ -470,6 +482,24 @@ class NodeService : Service() {
             analytics.trackEvent(AnalyticsEvent.ToggleAnalyticsEvent.NodeUiState(isEnabled = false))
         }
         updateNodeStatus()
+    }
+
+    /**
+     * The node persists an "active-services" list in its user config. On the
+     * very first run (before terms were agreed) the mobile node writes
+     * "scraping" only, so startProvider() would keep starting just scraping
+     * forever — data_transfer and dvpn would never toggle on. Ensure the full
+     * set is active before starting; startProvider() itself skips whatever is
+     * already running, so this is safe to call repeatedly.
+     */
+    private fun ensureAllServicesActive(node: MobileNode) {
+        try {
+            node.setUserConfig(ACTIVE_SERVICES_KEY, ALL_SERVICES_VALUE)
+        } catch (error: Throwable) {
+            // Never block the provider start on a config write — worst case
+            // we retry on the next tick.
+            Log.e(TAG, "unable to set active-services config", error)
+        }
     }
 
     private fun isMobileLimitReached(): Boolean {
@@ -532,6 +562,18 @@ class NodeService : Service() {
         override fun stopServices() {
             mobileNode?.stopProvider()
             analytics.trackEvent(AnalyticsEvent.ToggleAnalyticsEvent.NodeUiState(isEnabled = false))
+        }
+
+        override suspend fun restartServices() = withContext(dispatcher) {
+            val node = mobileNode ?: nodeContainer.getInstance().also { mobileNode = it }
+            // Cut the provider sessions…
+            node.stopProvider()
+            // …give the services manager a moment to tear everything down, so
+            // the start that follows cannot race against the stop…
+            delay(RESTART_SETTLE_DELAY)
+            // …and bring the provider back up with the full service set.
+            ensureAllServicesActive(node)
+            node.startProvider()
         }
 
         override suspend fun stop() {
