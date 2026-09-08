@@ -15,6 +15,7 @@ sealed class Settings {
         data class UpdateLimit(val value: String) : Event()
         object SaveMobileDataLimit : Event()
         object OnContinue : Event()
+        object RestartNode : Event()
         object ShutDown : Event()
         object ConfirmShutDown : Event()
         object CancelShutDown : Event()
@@ -28,6 +29,7 @@ sealed class Settings {
         val mobileDataLimitInvalid: Boolean,
         val isSaveButtonEnabled: Boolean,
         val isStartingNode: Boolean,
+        val isRestartingNode: Boolean = false,
         val showShutDownConfirmation: Boolean,
         val nodeError: NodeError?,
         val continueButtonEnabled: Boolean,

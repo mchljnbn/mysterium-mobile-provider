@@ -122,6 +122,10 @@ class SettingsViewModel(
                 startNodeInForeground()
             }
 
+            Settings.Event.RestartNode -> {
+                restartNode()
+            }
+
             Settings.Event.ShutDown -> {
                 setState { copy(showShutDownConfirmation = true) }
             }
@@ -173,6 +177,18 @@ class SettingsViewModel(
 
     private fun updateNodeConfig(config: NodeConfig) = launch {
         node.updateConfig(config)
+    }
+
+    /**
+     * Cuts the provider connection and re-establishes it. The app and the
+     * foreground service keep running — only the provider services bounce.
+     */
+    private fun restartNode() = launch {
+        setState { copy(isRestartingNode = true) }
+        withContext(ioDispatcher) {
+            node.restartServices()
+        }
+        setState { copy(isRestartingNode = false) }
     }
 
     private fun shutDownNode() = launch {

@@ -76,6 +76,12 @@ interface Node {
     fun disableForegroundService()
 
     /**
+     * Cut the provider connection and re-establish it without
+     * restarting the app or the foreground service.
+     */
+    suspend fun restartServices()
+
+    /**
      * Stops node and foreground service
      */
     suspend fun stop()

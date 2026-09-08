@@ -246,6 +246,22 @@ private fun OptionsContent(
             ) {
                 onEvent(Settings.Event.ShutDown)
             }
+
+            ButtonOption(
+                title = stringResource(id = R.string.restart_node),
+                subTitle = stringResource(
+                    id = if (state.isRestartingNode) {
+                        R.string.restarting
+                    } else {
+                        R.string.restart
+                    }
+                ),
+                painterResource = painterResource(id = R.drawable.ic_restart),
+            ) {
+                if (!state.isRestartingNode) {
+                    onEvent(Settings.Event.RestartNode)
+                }
+            }
         }
 
         if (!isOnboarding && appVersion != null) {

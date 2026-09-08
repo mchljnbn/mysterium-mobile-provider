@@ -85,6 +85,10 @@ internal class NodeImpl(
         service?.stopForegroundService()
     }
 
+    override suspend fun restartServices() {
+        service?.restartServices()
+    }
+
     override suspend fun stop() {
         service?.stop()
         disableForegroundService()
