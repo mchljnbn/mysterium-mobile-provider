@@ -59,16 +59,18 @@ jobs:
             echo "APK not found at $APK_PATH"
             exit 1
           fi
-          
+
           echo "Uploading to file.io..."
-          RESPONSE=$(curl -s -F "file=@$APK_PATH" "https://file.io/?expires=14d")
-          DOWNLOAD_URL=$(echo "$RESPONSE" | grep -o '"link":"[^"]*' | cut -d'"' -f4)
-          
+          RESPONSE=$(curl -sS -L -F "file=@$APK_PATH" "https://file.io/?expires=14d")
+          echo "$RESPONSE"
+
+          DOWNLOAD_URL=$(echo "$RESPONSE" | grep -o 'https://[^"[:space:]]*' | head -n 1)
+
           if [ -z "$DOWNLOAD_URL" ]; then
             echo "Upload failed. Response: $RESPONSE"
             exit 1
           fi
-          
+
           echo "Download URL: $DOWNLOAD_URL"
           echo "## 📥 APK Download Link" >> "$GITHUB_STEP_SUMMARY"
           echo "[Click here to download APK]($DOWNLOAD_URL)" >> "$GITHUB_STEP_SUMMARY"
