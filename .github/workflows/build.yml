@@ -35,11 +35,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: android/libs
-          key: node-aar-1.39.7
+          key: node-aar-1.39.6
 
-      # Upstream's build.gradle.kts reads optional release signing from
-      # android/local.properties; the keystore is committed at
-      # android/keystore/ on this branch for consistent personal builds.
       - name: Write signing config
         working-directory: android
         run: |
@@ -54,7 +51,7 @@ jobs:
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon
 
-      - name: Upload APK to transfer.sh (no sign-up)
+      - name: Upload APK to file.io (no sign-up, 14 days)
         if: success()
         run: |
           APK_PATH="android/app/build/outputs/apk/release/app-release.apk"
@@ -62,12 +59,20 @@ jobs:
             echo "APK not found at $APK_PATH"
             exit 1
           fi
-
-          URL=$(curl --fail --silent --show-error --upload-file "$APK_PATH" "https://transfer.sh/mystnodes-provider-${{ github.run_number }}.apk")
-          echo "APK_URL=$URL" >> "$GITHUB_ENV"
-          echo "Download URL: $URL"
-          echo "## APK Download" >> "$GITHUB_STEP_SUMMARY"
-          echo "$URL" >> "$GITHUB_STEP_SUMMARY"
+          
+          echo "Uploading to file.io..."
+          RESPONSE=$(curl -s -F "file=@$APK_PATH" "https://file.io/?expires=14d")
+          DOWNLOAD_URL=$(echo "$RESPONSE" | grep -o '"link":"[^"]*' | cut -d'"' -f4)
+          
+          if [ -z "$DOWNLOAD_URL" ]; then
+            echo "Upload failed. Response: $RESPONSE"
+            exit 1
+          fi
+          
+          echo "Download URL: $DOWNLOAD_URL"
+          echo "## 📥 APK Download Link" >> "$GITHUB_STEP_SUMMARY"
+          echo "[Click here to download APK]($DOWNLOAD_URL)" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Expires in 14 days**" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
