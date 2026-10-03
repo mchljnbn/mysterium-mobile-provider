@@ -64,12 +64,13 @@ val downloadProviderMobileNode by tasks.registering {
     }
 }
 
+// provider-mobile-node is resolved from the local libs/ repo, and ANY task in :app / :node
+// can end up resolving it (e.g. :app:mergeReleaseNativeLibs), not just preBuild. If such a
+// task runs in parallel while the AAR is still downloading, Gradle fails with
+// "Could not find network.mysterium:provider-mobile-node". Make every subproject task
+// wait for the download so the files always exist before any resolution happens.
 subprojects {
-    listOf("com.android.application", "com.android.library").forEach { pluginId ->
-        plugins.withId(pluginId) {
-            tasks.named("preBuild") {
-                dependsOn(rootProject.tasks.named("downloadProviderMobileNode"))
-            }
-        }
+    tasks.configureEach {
+        dependsOn(rootProject.tasks.named("downloadProviderMobileNode"))
     }
 }
