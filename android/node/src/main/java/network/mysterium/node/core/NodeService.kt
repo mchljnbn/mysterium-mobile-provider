@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -197,23 +198,28 @@ class NodeService : Service() {
         val notification = buildNotification(
             title = getString(R.string.notification_status_connecting),
             text = getString(R.string.notification_uptime, "0s")
-        ) ?: return
+        )
         // The notification must be attached before any slow node work — never
         // gate the first startForeground() behind network operations.
         startForegroundWithConnectedDeviceType(notification.build())
         isNotificationShown.value = true
     }
 
-    private fun buildNotification(title: String, text: String?): NotificationCompat.Builder? {
+    private fun buildNotification(title: String, text: String?): NotificationCompat.Builder {
         if (contentIntent == null) {
-            val intent =
-                packageManager.getLaunchIntentForPackage("network.mysterium.provider") ?: return null
-            contentIntent = PendingIntent.getActivity(
-                this,
-                0,
-                intent,
-                PendingIntent.FLAG_IMMUTABLE
-            )
+            // Resolve our own package instead of a hardcoded application id: with a
+            // different applicationId the hardcoded lookup returned null (or the
+            // original app's launcher). If there is no launch intent the
+            // notification is still shown, just without a tap target — startForeground()
+            // must always be reached or the system kills the app.
+            contentIntent = packageManager.getLaunchIntentForPackage(packageName)?.let { intent ->
+                PendingIntent.getActivity(
+                    this,
+                    0,
+                    intent,
+                    PendingIntent.FLAG_IMMUTABLE
+                )
+            }
         }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
@@ -361,7 +367,7 @@ class NodeService : Service() {
         val notification = buildNotification(
             title = title,
             text = getString(R.string.notification_uptime, formattedUptime())
-        ) ?: return
+        )
         notificationManager.notify(NOTIFICATION_ID, notification.build())
     }
 
@@ -519,6 +525,10 @@ class NodeService : Service() {
     override fun onDestroy() {
         cancelTimers()
         releaseWakeLock()
+        // Cancel every collector/job of this instance. Without it they outlive the
+        // service and keep driving a node that was already shut down, next to the
+        // collectors of the next service instance.
+        scope.cancel()
         super.onDestroy()
     }
 

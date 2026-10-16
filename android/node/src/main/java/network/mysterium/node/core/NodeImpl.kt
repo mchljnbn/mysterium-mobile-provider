@@ -7,6 +7,7 @@ import android.content.ServiceConnection
 import android.os.IBinder
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.suspendCancellableCoroutine
 import network.mysterium.node.Node
 import network.mysterium.node.Storage
 import network.mysterium.node.data.NodeServiceDataSource
@@ -18,7 +19,6 @@ import network.mysterium.node.model.NodeTerms
 import network.mysterium.terms.Terms
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
-import kotlin.coroutines.suspendCoroutine
 
 internal class NodeImpl(
     private val context: Context,
@@ -104,11 +104,20 @@ internal class NodeImpl(
         dataSource.updateStatus(NodeStatus.OFFLINE)
     }
 
-    private suspend fun startService() = suspendCoroutine { continuation ->
+    private suspend fun startService(): NodeServiceBinder = suspendCancellableCoroutine { continuation ->
         val intent = Intent(context, NodeService::class.java)
         ContextCompat.startForegroundService(context, intent)
-        serviceConnection = serviceConnection ?: object : ServiceConnection {
+
+        // Drop a connection left over from an earlier failed attempt: it would still
+        // be bound, and its callbacks would belong to a continuation that is gone.
+        serviceConnection?.let { stale -> runCatching { context.unbindService(stale) } }
+
+        val connection = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+                // The system can call this again after a reconnect; only the first
+                // call may resume the continuation (resuming twice crashes).
+                if (!continuation.isActive) return
+
                 val service = binder as? NodeServiceBinder
 
                 if (service == null) {
@@ -123,10 +132,24 @@ internal class NodeImpl(
                 // restart will bring it back; nothing to do here.
             }
         }
-        context.bindService(
+        serviceConnection = connection
+
+        val didBind = context.bindService(
             intent,
-            serviceConnection!!,
+            connection,
             Context.BIND_AUTO_CREATE
         )
+        if (!didBind) {
+            // Even a failed bind has to be released with unbindService().
+            runCatching { context.unbindService(connection) }
+            serviceConnection = null
+            continuation.resumeWithException(IllegalStateException("Unable to bind NodeService"))
+            return@suspendCancellableCoroutine
+        }
+
+        continuation.invokeOnCancellation {
+            runCatching { context.unbindService(connection) }
+            if (serviceConnection === connection) serviceConnection = null
+        }
     }
 }
