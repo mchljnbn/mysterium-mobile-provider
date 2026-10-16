@@ -1,3 +1,4 @@
+
 name: Build custom APK
 
 on:
@@ -6,12 +7,12 @@ on:
       - custom-build
   workflow_dispatch:
 
-concurrency:
-  group: build-${{ github.ref }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
+
+concurrency:
+  group: custom-build-apk
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -25,68 +26,74 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 21
-          cache: gradle
+          java-version: "21"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/gradle/libs.versions.toml', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
 
       - name: Cache Mysterium node AAR
         uses: actions/cache@v4
         with:
           path: android/libs
-          key: node-aar-${{ hashFiles('android/gradle/libs.versions.toml') }}
+          key: node-aar-1.39.6
 
-      - name: Verify release keystore
-        working-directory: android
+      - name: Check existing signing keystore
         run: |
-          test -f keystore/release.keystore || {
-            echo "Missing android/keystore/release.keystore"
+          if [ ! -f android/keystore/release.keystore ]; then
+            echo "::error::Existing release keystore not found."
+            echo "Restore the original keystore before building."
             exit 1
-          }
+          fi
 
-      # Uses the same existing release keystore and signing configuration as prior builds.
       - name: Write signing config
         working-directory: android
-        env:
-          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        shell: bash
         run: |
-          test -n "$RELEASE_STORE_PASSWORD" || { echo "Missing RELEASE_STORE_PASSWORD secret"; exit 1; }
-          test -n "$RELEASE_KEY_ALIAS" || { echo "Missing RELEASE_KEY_ALIAS secret"; exit 1; }
-          test -n "$RELEASE_KEY_PASSWORD" || { echo "Missing RELEASE_KEY_PASSWORD secret"; exit 1; }
-          cat > local.properties <<EOF
+          cat > local.properties <<'EOF'
           releaseStoreFile=keystore/release.keystore
-          releaseStorePassword=$RELEASE_STORE_PASSWORD
-          releaseKeyAlias=$RELEASE_KEY_ALIAS
-          releaseKeyPassword=$RELEASE_KEY_PASSWORD
+          releaseStorePassword=YOUR_EXISTING_KEYSTORE_PASSWORD
+          releaseKeyAlias=YOUR_EXISTING_KEY_ALIAS
+          releaseKeyPassword=YOUR_EXISTING_KEY_PASSWORD
           EOF
 
       - name: Build release APK
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon
 
-      - name: Verify APK integrity
+      - name: Verify APK
+        shell: bash
         run: |
           APK_PATH="android/app/build/outputs/apk/release/app-release.apk"
-          test -s "$APK_PATH" || {
-            echo "APK not found or empty: $APK_PATH"
-            exit 1
-          }
-          APK_SIZE=$(wc -c < "$APK_PATH")
-          echo "APK size: $APK_SIZE bytes"
-          if [ "$APK_SIZE" -lt 1000000 ]; then
-            echo "ERROR: APK is suspiciously small (< 1MB)"
+
+          if [ ! -f "$APK_PATH" ]; then
+            echo "::error::APK was not generated."
             exit 1
           fi
-          echo "APK integrity check passed"
 
-      - name: Upload APK artifact
+          APK_SIZE=$(stat -c%s "$APK_PATH")
+          echo "APK size: $APK_SIZE bytes"
+
+          if [ "$APK_SIZE" -lt 1000000 ]; then
+            echo "::error::APK is unexpectedly small."
+            exit 1
+          fi
+
+          echo "APK integrity check passed."
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: mystnodes-custom-release-apk
           path: android/app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: error
           retention-days: 30
-          compression-level: 6
+          compression-level: 0
