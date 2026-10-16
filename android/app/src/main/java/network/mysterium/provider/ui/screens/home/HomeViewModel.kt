@@ -12,7 +12,7 @@ class HomeViewModel(
 ) : CoreViewModel<Home.Event, Home.State, Home.Effect>() {
 
     private val ignoreServices: List<NodeServiceType.Service> =
-        listOf(NodeServiceType.Service.WIREGUARD)
+        emptyList()
 
     init {
         viewModelScope.launch(defaultErrorHandler) { node.start() }
