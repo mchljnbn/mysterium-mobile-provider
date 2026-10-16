@@ -36,6 +36,14 @@
             android:name="io.sentry.attach-screenshot"
             android:value="true" />
 
+        <!-- Custom build: don't send usage analytics to the upstream Firebase project. -->
+        <meta-data
+            android:name="firebase_analytics_collection_enabled"
+            android:value="false" />
+        <meta-data
+            android:name="google_analytics_adid_collection_enabled"
+            android:value="false" />
+
         <activity
             android:name=".ui.main.MainActivity"
             android:exported="true"
@@ -107,6 +115,7 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 

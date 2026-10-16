@@ -1,9 +1,6 @@
 package network.mysterium.node.core
 
 import android.content.Context
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import network.mysterium.node.Storage
@@ -24,6 +21,10 @@ internal class StorageImpl(
     }
 
     private val preferences = context.getSharedPreferences("mysterium.node", Context.MODE_PRIVATE)
+
+    // Stored JSON written by another build (extra/missing fields) must never
+    // crash the app on startup — fall back to defaults instead.
+    private val json = Json { ignoreUnknownKeys = true }
 
     override var isRegistered: Boolean
         get() = preferences.getBoolean(IS_REGISTERED, false)
@@ -62,12 +63,16 @@ internal class StorageImpl(
 
     private inline fun <reified T> decode(key: String): T? {
         val string = preferences.getString(key, null) ?: return null
-        return Json.decodeFromString(string)
+        return try {
+            json.decodeFromString<T>(string)
+        } catch (error: Exception) {
+            null
+        }
     }
 
     private inline fun <reified T> encode(key: String, value: T) {
         preferences.edit()
-            .putString(key, Json.encodeToString(value))
+            .putString(key, json.encodeToString(value))
             .apply()
     }
 }

@@ -29,10 +29,11 @@ class App : Application() {
     }
 
     private fun scheduleWatchdog() {
-        // 10-minute keep-alive cron: checks the node service is alive and
-        // restarts it if the heartbeat went stale.
+        // 15-minute keep-alive cron (WorkManager's minimum periodic interval —
+        // anything lower is silently clamped to 15): checks the node service
+        // is alive and restarts it if the heartbeat went stale.
         val request = PeriodicWorkRequestBuilder<NodeWatchdogWorker>(
-            10, TimeUnit.MINUTES
+            15, TimeUnit.MINUTES
         ).build()
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             NodeWatchdogWorker.UNIQUE_WORK_NAME,
