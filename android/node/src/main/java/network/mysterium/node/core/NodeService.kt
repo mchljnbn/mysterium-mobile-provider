@@ -63,7 +63,7 @@ class NodeService : Service() {
          * startProvider() should bring up (comma separated service types).
          */
         const val ACTIVE_SERVICES_KEY = "active-services"
-        const val ALL_SERVICES_VALUE = "wireguard,scraping,data_transfer,dvpn,monitoring"
+        const val ALL_SERVICES_VALUE = "scraping,data_transfer,dvpn,monitoring"
         val BALANCE_CHECK_INTERVAL = TimeUnit.MINUTES.toMillis(1)
         val UPTIME_UPDATE_INTERVAL = TimeUnit.SECONDS.toMillis(1)
         // How long to wait before auto-starting the provider again after a
