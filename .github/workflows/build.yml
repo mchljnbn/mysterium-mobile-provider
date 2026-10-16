@@ -45,6 +45,7 @@ jobs:
             exit 1
           }
 
+      # Uses the same existing release keystore and signing configuration as prior builds.
       - name: Write signing config
         working-directory: android
         env:
@@ -52,9 +53,9 @@ jobs:
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
-          test -n "$RELEASE_STORE_PASSWORD"
-          test -n "$RELEASE_KEY_ALIAS"
-          test -n "$RELEASE_KEY_PASSWORD"
+          test -n "$RELEASE_STORE_PASSWORD" || { echo "Missing RELEASE_STORE_PASSWORD secret"; exit 1; }
+          test -n "$RELEASE_KEY_ALIAS" || { echo "Missing RELEASE_KEY_ALIAS secret"; exit 1; }
+          test -n "$RELEASE_KEY_PASSWORD" || { echo "Missing RELEASE_KEY_PASSWORD secret"; exit 1; }
           cat > local.properties <<EOF
           releaseStoreFile=keystore/release.keystore
           releaseStorePassword=$RELEASE_STORE_PASSWORD
