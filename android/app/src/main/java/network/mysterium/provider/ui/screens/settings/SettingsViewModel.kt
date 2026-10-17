@@ -25,6 +25,7 @@ class SettingsViewModel(
             isMobileDataOn = false,
             isMobileDataLimitOn = false,
             isAllowUseOnBatteryOn = false,
+            isPublicServiceOn = true,
             mobileDataLimit = null,
             mobileDataLimitInvalid = false,
             isSaveButtonEnabled = false,
@@ -50,6 +51,7 @@ class SettingsViewModel(
                         isMobileDataOn = config.useMobileData,
                         isMobileDataLimitOn = config.useMobileDataLimit,
                         isAllowUseOnBatteryOn = config.allowUseOnBattery,
+                        isPublicServiceOn = config.publicServiceEnabled,
                         continueButtonEnabled = continueEnabled,
                         mobileDataLimit = config.mobileDataLimit?.let {
                             Converter.bytesToMegabytes(it)
@@ -89,6 +91,11 @@ class SettingsViewModel(
                 analytics.trackEvent(AnalyticsEvent.ToggleAnalyticsEvent.UseOnBatteryEvent(event.checked))
                 updateNodeConfig(node.config.copy(allowUseOnBattery = event.checked))
                 setState { copy(isAllowUseOnBatteryOn = event.checked) }
+            }
+
+            is Settings.Event.TogglePublicService -> {
+                updateNodeConfig(node.config.copy(publicServiceEnabled = event.checked))
+                setState { copy(isPublicServiceOn = event.checked) }
             }
 
             is Settings.Event.UpdateLimit -> {
