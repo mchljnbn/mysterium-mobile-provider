@@ -7,7 +7,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -67,7 +66,11 @@ private fun NodeUIScreenContent(
             }
         }
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = Paddings.default)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Paddings.default)
+        ) {
             SwitchOption(
                 title = stringResource(id = R.string.service_public),
                 checked = state.publicServiceEnabled,
@@ -79,7 +82,24 @@ private fun NodeUIScreenContent(
                     )
                 }
             )
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier.weight(1f)
+            ) {
+                ComposeWebView(
+                    modifier = Modifier.fillMaxWidth(),
+                    url = state.url,
+                    onReload = {
+                        onEvent(NodeUI.Event.SetReloadCallback(it))
+                    },
+                    onLoadUrl = {
+                        onEvent(NodeUI.Event.UrlLoaded(it))
+                    },
+                    ignoreUrls = state.ignoredUrls
+                )
+            }
         }
+        /* ComposeWebView moved inside Column to allow weighted layout. */
+        /*
         ComposeWebView(
             modifier = Modifier.weight(1f),
             url = state.url,
@@ -91,6 +111,7 @@ private fun NodeUIScreenContent(
             },
             ignoreUrls = state.ignoredUrls
         )
+        */
     }
 }
 
