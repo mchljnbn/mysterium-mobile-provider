@@ -37,6 +37,7 @@ class NodeUIViewModel(
             url = "",
             reload = {},
             isRegistered = false,
+            publicServiceEnabled = node.config.publicServiceEnabled,
             ignoredUrls = listOf(
                 Config.stripeRedirectUrl,
                 Config.payPalRedirectUrl,
@@ -56,6 +57,18 @@ class NodeUIViewModel(
                             null -> node.nodeUIUrl
                         }
                     )
+                }
+            }
+
+            is NodeUI.Event.TogglePublicService -> {
+                setState { copy(publicServiceEnabled = event.enabled) }
+                launch {
+                    try {
+                        node.updateConfig(node.config.copy(publicServiceEnabled = event.enabled))
+                    } catch (error: Throwable) {
+                        Log.e("NodeUI", "Failed to update Public service", error)
+                        setState { copy(publicServiceEnabled = node.config.publicServiceEnabled) }
+                    }
                 }
             }
 

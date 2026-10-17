@@ -4,6 +4,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
+import androidx.compose.material3.Text
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import network.mysterium.provider.R
+import network.mysterium.provider.ui.screens.settings.views.SwitchOption
+import network.mysterium.provider.ui.theme.Paddings
 import androidx.compose.ui.tooling.preview.Preview
 import network.mysterium.provider.ui.components.buttons.HomeButton
 import network.mysterium.provider.ui.components.buttons.SettingsButton
@@ -57,7 +67,21 @@ private fun NodeUIScreenContent(
             }
         }
     ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = Paddings.default)) {
+            SwitchOption(
+                title = stringResource(id = R.string.service_public),
+                checked = state.publicServiceEnabled,
+                onCheckedChange = { onEvent(NodeUI.Event.TogglePublicService(it)) },
+                content = {
+                    Text(
+                        text = stringResource(id = R.string.service_public_description),
+                        modifier = Modifier.padding(top = Paddings.small)
+                    )
+                }
+            )
+        }
         ComposeWebView(
+            modifier = Modifier.weight(1f),
             url = state.url,
             onReload = {
                 onEvent(NodeUI.Event.SetReloadCallback(it))
@@ -80,6 +104,7 @@ private fun NodeUIScreenContentPreview() {
             reload = {},
             isRegistered = false,
             ignoredUrls = emptyList(),
+            publicServiceEnabled = true,
         ),
         onEvent = {},
         onNavigate = {}
