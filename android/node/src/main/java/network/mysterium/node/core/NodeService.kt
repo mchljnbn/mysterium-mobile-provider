@@ -79,7 +79,6 @@ class NodeService : Service() {
         // can reach every other service but never reaches this one.
         const val AUTO_DISABLE_FAILING_PUBLIC = true
         const val DIAGNOSTICS_PREFS = "mysterium.node.diagnostics"
-        const val KEY_PUBLIC_ENABLED = "publicServiceEnabled"
         val MONITORING_FIRST_CHECK_DELAY = TimeUnit.MINUTES.toMillis(2)
         val MONITORING_CHECK_INTERVAL = TimeUnit.MINUTES.toMillis(15)
         // Mysterium refreshes the verdict about hourly, so act only after several
