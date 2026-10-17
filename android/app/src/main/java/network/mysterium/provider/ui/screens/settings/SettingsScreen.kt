@@ -232,6 +232,14 @@ private fun OptionsContent(
                 }
             )
 
+            SwitchOption(
+                title = stringResource(id = R.string.service_public),
+                checked = state.isPublicServiceOn,
+                onCheckedChange = {
+                    onEvent(Settings.Event.TogglePublicService(it))
+                }
+            )
+
             ButtonOption(
                 title = stringResource(id = R.string.node_ui),
                 subTitle = stringResource(id = R.string.open),
