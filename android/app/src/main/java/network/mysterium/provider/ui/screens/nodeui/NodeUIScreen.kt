@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -82,7 +83,7 @@ private fun NodeUIScreenContent(
                     )
                 }
             )
-            androidx.compose.foundation.layout.Box(
+            Box(
                 modifier = Modifier.weight(1f)
             ) {
                 ComposeWebView(
@@ -98,20 +99,6 @@ private fun NodeUIScreenContent(
                 )
             }
         }
-        /* ComposeWebView moved inside Column to allow weighted layout. */
-        /*
-        ComposeWebView(
-            modifier = Modifier.weight(1f),
-            url = state.url,
-            onReload = {
-                onEvent(NodeUI.Event.SetReloadCallback(it))
-            },
-            onLoadUrl = {
-                onEvent(NodeUI.Event.UrlLoaded(it))
-            },
-            ignoreUrls = state.ignoredUrls
-        )
-        */
     }
 }
 
