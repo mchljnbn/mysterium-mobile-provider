@@ -44,6 +44,9 @@ import network.mysterium.node.model.NodeIdentity
 import network.mysterium.node.model.NodeServiceType
 import network.mysterium.node.model.NodeStatus
 import network.mysterium.node.model.NodeUsage
+import network.mysterium.node.monitoring.MonitoringDiagnostics
+import network.mysterium.node.monitoring.MonitoringReport
+import network.mysterium.node.monitoring.MonitoringState
 import network.mysterium.node.network.NetworkReporter
 import network.mysterium.node.network.NetworkType
 import network.mysterium.node.utils.cancelCatching
@@ -68,6 +71,23 @@ class NodeService : Service() {
          */
         const val ACTIVE_SERVICES_KEY = "active-services"
         const val ALL_SERVICES_VALUE = "wireguard,scraping,data_transfer,dvpn,monitoring"
+        const val SERVICES_WITHOUT_PUBLIC_VALUE = "scraping,data_transfer,dvpn,monitoring"
+        const val PUBLIC_SERVICE_ID = "wireguard"
+
+        // Monitoring troubleshooting.
+        // Auto-switch the Public (wireguard) service off when the monitoring agent
+        // can reach every other service but never reaches this one.
+        const val AUTO_DISABLE_FAILING_PUBLIC = true
+        const val DIAGNOSTICS_PREFS = "mysterium.node.diagnostics"
+        const val KEY_PUBLIC_ENABLED = "publicServiceEnabled"
+        val MONITORING_FIRST_CHECK_DELAY = TimeUnit.MINUTES.toMillis(2)
+        val MONITORING_CHECK_INTERVAL = TimeUnit.MINUTES.toMillis(15)
+        // Mysterium refreshes the verdict about hourly, so act only after several
+        // consecutive failed checks.
+        const val MONITORING_FAILURES_BEFORE_ACTION = 3
+        // Repeated restarts get rate-limited by the quality oracle - bounce rarely.
+        val MONITORING_RECOVERY_COOLDOWN = TimeUnit.HOURS.toMillis(6)
+
         val BALANCE_CHECK_INTERVAL = TimeUnit.MINUTES.toMillis(1)
         // The notification uptime is a system-ticked chronometer, so the status
         // only needs a slow safety refresh (state changes also push updates).
@@ -107,6 +127,24 @@ class NodeService : Service() {
     // Serializes every provider start/stop so concurrent triggers (network,
     // battery, limit, identity, restart button) cannot race each other.
     private val servicesMutex = Mutex()
+
+    private val monitoringDiagnostics = MonitoringDiagnostics()
+
+    @Volatile
+    private var monitoringReport: MonitoringReport? = null
+    private var consecutiveMonitoringFailures = 0
+    private var lastMonitoringRecoveryAt = 0L
+
+    private val diagnosticsPrefs by lazy {
+        getSharedPreferences(DIAGNOSTICS_PREFS, Context.MODE_PRIVATE)
+    }
+
+    /** Whether the Public (wireguard) service is part of the active services. */
+    private var isPublicServiceEnabled: Boolean
+        get() = diagnosticsPrefs.getBoolean(KEY_PUBLIC_ENABLED, true)
+        set(value) {
+            diagnosticsPrefs.edit().putBoolean(KEY_PUBLIC_ENABLED, value).apply()
+        }
 
     private var balanceTimer: Timer? = null
     private var endOfDayTimer: Timer? = null
@@ -178,6 +216,7 @@ class NodeService : Service() {
         startNode()
         observeNotification()
         observeStatusForNotification()
+        observeMonitoring()
     }
 
     /**
@@ -393,7 +432,8 @@ class NodeService : Service() {
     }
 
     /**
-     * Refreshes the foreground notification title with the current status.
+     * Refreshes the foreground notification with the current status and, when
+     * Mysterium's monitoring has something to say, the reason + what to try.
      * The uptime itself is a system-ticked chronometer. No-op while the
      * foreground notification is intentionally removed.
      */
@@ -410,7 +450,20 @@ class NodeService : Service() {
             NodeStatus.OFFLINE -> getString(R.string.notification_status_offline)
             NodeStatus.UNKNOWN -> getString(R.string.notification_status_connecting)
         }
-        notificationManager.notify(NOTIFICATION_ID, buildNotification(title = title).build())
+        notificationManager.notify(
+            NOTIFICATION_ID,
+            buildNotification(title = title, text = monitoringNotificationText()).build()
+        )
+    }
+
+    private fun monitoringNotificationText(): String? {
+        val reportText = monitoringReport?.notificationText() ?: return null
+        return if (isPublicServiceEnabled) {
+            reportText
+        } else {
+            "Public (wireguard) is off - it was switched off automatically after " +
+                    "failing monitoring.\n$reportText"
+        }
     }
 
     private fun startBalanceTimer() {
@@ -499,6 +552,89 @@ class NodeService : Service() {
         }
     }
 
+    // ---- "Monitoring failed" troubleshooting -------------------------------------------
+
+    /**
+     * Periodically asks Mysterium (and the local node) how monitoring sees this
+     * node, logs the reason + hints (adb logcat -s NodeService MonitoringDiagnostics)
+     * and shows them in the notification.
+     */
+    private fun observeMonitoring() = scope.launch {
+        // Give the node time to register and bring its services up first.
+        delay(MONITORING_FIRST_CHECK_DELAY)
+        while (true) {
+            safely("monitoring check") { runMonitoringCheck() }
+            delay(MONITORING_CHECK_INTERVAL)
+        }
+    }
+
+    private suspend fun runMonitoringCheck() {
+        val identity = nodeServiceDataSource.identity.value
+        if (identity.status != NodeIdentity.Status.REGISTERED) return
+
+        val report = monitoringDiagnostics.check(identity.address, isPublicServiceEnabled)
+        monitoringReport = report
+        Log.i(TAG, "monitoring check: ${report.state} - ${report.summary}")
+        report.hints.forEach { Log.i(TAG, "monitoring hint: $it") }
+
+        if (report.state == MonitoringState.FAILED) {
+            consecutiveMonitoringFailures++
+            actOnMonitoringFailure(report)
+        } else {
+            consecutiveMonitoringFailures = 0
+        }
+        updateNotification()
+    }
+
+    /**
+     * Conservative self-healing after several failed checks in a row:
+     *  1. If the Public (wireguard) service is the only one monitoring cannot
+     *     reach, switch just that service off and restart the provider once.
+     *  2. Otherwise a gentle provider restart, at most once per cooldown (restart
+     *     loops make things worse: the quality oracle rate-limits them).
+     */
+    private suspend fun actOnMonitoringFailure(report: MonitoringReport) {
+        if (consecutiveMonitoringFailures < MONITORING_FAILURES_BEFORE_ACTION) return
+        if (!storage.shouldRun) return
+        val status = nodeServiceDataSource.status.value
+        if (status == NodeStatus.NO_NETWORK || status == NodeStatus.PAUSED) return
+
+        val publicIsCulprit = PUBLIC_SERVICE_ID in report.failingServices &&
+                report.passingServices.isNotEmpty()
+        if (AUTO_DISABLE_FAILING_PUBLIC && isPublicServiceEnabled && publicIsCulprit) {
+            Log.w(TAG, "Public (wireguard) keeps failing monitoring while other services pass - switching it off")
+            isPublicServiceEnabled = false
+            consecutiveMonitoringFailures = 0
+            lastMonitoringRecoveryAt = System.currentTimeMillis()
+            bounceProvider()
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        if (now - lastMonitoringRecoveryAt < MONITORING_RECOVERY_COOLDOWN) return
+        lastMonitoringRecoveryAt = now
+        consecutiveMonitoringFailures = 0
+        Log.w(TAG, "Monitoring failed repeatedly - soft restarting the provider")
+        bounceProvider()
+    }
+
+    /** Stops the provider, lets it settle and starts it again with the full service set. */
+    private suspend fun bounceProvider() = withContext(dispatcher) {
+        val node = mobileNode ?: nodeContainer.getInstance().also { mobileNode = it }
+        // Hold the services lock for the whole bounce so no other trigger
+        // can start the provider in the middle of the restart.
+        servicesMutex.withLock {
+            // Cut the provider sessions…
+            node.stopProvider()
+            // …give the services manager a moment to tear everything down, so
+            // the start that follows cannot race against the stop…
+            delay(RESTART_SETTLE_DELAY)
+            // …and bring the provider back up with the full service set.
+            ensureAllServicesActive(node)
+            node.startProvider()
+        }
+    }
+
     private suspend fun updateNodeServices(isSkipStart: Boolean = false) = withContext(dispatcher) {
         servicesMutex.withLock {
             val config = storage.config
@@ -529,13 +665,16 @@ class NodeService : Service() {
      * very first run (before terms were agreed) the mobile node writes
      * "scraping" only, so startProvider() would keep starting just scraping
      * forever — data_transfer and dvpn would never toggle on. Ensure the full
-     * set (including the public wireguard service) is active before starting;
-     * startProvider() itself skips whatever is already running, so this is safe
-     * to call repeatedly.
+     * set (including the public wireguard service, unless it was switched off
+     * after failing monitoring) is active before starting; startProvider()
+     * itself skips whatever is already running, so this is safe to call
+     * repeatedly.
      */
     private fun ensureAllServicesActive(node: MobileNode) {
         try {
-            node.setUserConfig(ACTIVE_SERVICES_KEY, ALL_SERVICES_VALUE)
+            val services =
+                if (isPublicServiceEnabled) ALL_SERVICES_VALUE else SERVICES_WITHOUT_PUBLIC_VALUE
+            node.setUserConfig(ACTIVE_SERVICES_KEY, services)
         } catch (error: Throwable) {
             // Never block the provider start on a config write — worst case
             // we retry on the next tick.
@@ -609,21 +748,7 @@ class NodeService : Service() {
             analytics.trackEvent(AnalyticsEvent.ToggleAnalyticsEvent.NodeUiState(isEnabled = false))
         }
 
-        override suspend fun restartServices() = withContext(dispatcher) {
-            val node = mobileNode ?: nodeContainer.getInstance().also { mobileNode = it }
-            // Hold the services lock for the whole bounce so no other trigger
-            // can start the provider in the middle of the restart.
-            servicesMutex.withLock {
-                // Cut the provider sessions…
-                node.stopProvider()
-                // …give the services manager a moment to tear everything down, so
-                // the start that follows cannot race against the stop…
-                delay(RESTART_SETTLE_DELAY)
-                // …and bring the provider back up with the full service set.
-                ensureAllServicesActive(node)
-                node.startProvider()
-            }
-        }
+        override suspend fun restartServices() = bounceProvider()
 
         override suspend fun stop() {
             isStarted = false
