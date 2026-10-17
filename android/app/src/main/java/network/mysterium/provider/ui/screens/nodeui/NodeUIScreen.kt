@@ -6,6 +6,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -67,37 +68,38 @@ private fun NodeUIScreenContent(
             }
         }
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = Paddings.default)
-        ) {
-            SwitchOption(
-                title = stringResource(id = R.string.service_public),
-                checked = state.publicServiceEnabled,
-                onCheckedChange = { onEvent(NodeUI.Event.TogglePublicService(it)) },
-                content = {
-                    Text(
-                        text = stringResource(id = R.string.service_public_description),
-                        modifier = Modifier.padding(top = Paddings.small)
-                    )
-                }
-            )
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Native Public toggle above the web dashboard: the dashboard itself is
+            // a web page bundled inside the node library, so its Services card can't
+            // be extended from the app.
             Box(
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Paddings.default, vertical = Paddings.small)
             ) {
-                ComposeWebView(
-                    modifier = Modifier.fillMaxWidth(),
-                    url = state.url,
-                    onReload = {
-                        onEvent(NodeUI.Event.SetReloadCallback(it))
-                    },
-                    onLoadUrl = {
-                        onEvent(NodeUI.Event.UrlLoaded(it))
-                    },
-                    ignoreUrls = state.ignoredUrls
+                SwitchOption(
+                    title = stringResource(id = R.string.service_public),
+                    checked = state.publicServiceEnabled,
+                    onCheckedChange = { onEvent(NodeUI.Event.TogglePublicService(it)) },
+                    content = {
+                        Text(
+                            text = stringResource(id = R.string.service_public_description),
+                            modifier = Modifier.padding(top = Paddings.small)
+                        )
+                    }
                 )
             }
+            ComposeWebView(
+                modifier = Modifier.weight(1f),
+                url = state.url,
+                onReload = {
+                    onEvent(NodeUI.Event.SetReloadCallback(it))
+                },
+                onLoadUrl = {
+                    onEvent(NodeUI.Event.UrlLoaded(it))
+                },
+                ignoreUrls = state.ignoredUrls
+            )
         }
     }
 }
