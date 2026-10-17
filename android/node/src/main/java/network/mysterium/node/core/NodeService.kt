@@ -141,9 +141,9 @@ class NodeService : Service() {
 
     /** Whether the Public (wireguard) service is part of the active services. */
     private var isPublicServiceEnabled: Boolean
-        get() = diagnosticsPrefs.getBoolean(KEY_PUBLIC_ENABLED, true)
+        get() = storage.config.publicServiceEnabled
         set(value) {
-            diagnosticsPrefs.edit().putBoolean(KEY_PUBLIC_ENABLED, value).apply()
+            storage.config = storage.config.copy(publicServiceEnabled = value)
         }
 
     private var balanceTimer: Timer? = null
