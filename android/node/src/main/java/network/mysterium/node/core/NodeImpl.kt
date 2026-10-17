@@ -60,8 +60,13 @@ internal class NodeImpl(
         get() = dataSource.status
 
     override suspend fun updateConfig(config: NodeConfig) {
+        val publicServiceChanged = storage.config.publicServiceEnabled != config.publicServiceEnabled
         storage.config = config
-        service?.updateServices()
+        if (publicServiceChanged) {
+            service?.restartServices()
+        } else {
+            service?.updateServices()
+        }
     }
 
     private var service: NodeServiceBinder? = null
