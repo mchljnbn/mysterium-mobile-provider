@@ -391,6 +391,7 @@ private fun SettingsContentPreview() {
                 isMobileDataOn = true,
                 isMobileDataLimitOn = true,
                 isAllowUseOnBatteryOn = false,
+                isPublicServiceOn = true,
                 mobileDataLimit = 50,
                 mobileDataLimitInvalid = true,
                 isSaveButtonEnabled = true,
